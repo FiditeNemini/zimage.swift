@@ -2,6 +2,8 @@
 
 Swift port of [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) using [mlx-swift](https://github.com/ml-explore/mlx-swift) for Apple Silicon.
 
+**Try it with an easy UI:** [Lingdong Desktop App](https://lingdong.app/en)
+
 ## Requirements
 
 - macOS 14.0+
