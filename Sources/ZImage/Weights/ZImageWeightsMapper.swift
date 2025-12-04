@@ -51,6 +51,35 @@ public struct ZImageWeightsMapper {
     return try loadStandardComponent(files: ZImageFiles.vaeWeights, dtype: dtype)
   }
 
+  /// Load controlnet weights from a standalone safetensors file
+  public func loadControlnetWeights(from path: String, dtype: DType? = .bfloat16) throws -> [String: MLXArray] {
+    let url: URL
+    if path.hasPrefix("/") {
+      url = URL(fileURLWithPath: path)
+    } else {
+      url = snapshot.appending(path: path)
+    }
+
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      throw NSError(domain: "ZImageWeightsMapper", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: "Controlnet weights file not found: \(url.path)"
+      ])
+    }
+
+    var tensors: [String: MLXArray] = [:]
+    let reader = try SafeTensorsReader(fileURL: url)
+    for meta in reader.allMetadata() {
+      var tensor = try reader.tensor(named: meta.name)
+      if let targetDtype = dtype, tensor.dtype != targetDtype {
+        tensor = tensor.asType(targetDtype)
+      }
+      tensors[meta.name] = tensor
+    }
+
+    logger.info("Loaded \(tensors.count) controlnet tensors from \(url.lastPathComponent)")
+    return tensors
+  }
+
   private func loadStandardComponent(files: [String], dtype: DType?) throws -> [String: MLXArray] {
     var tensors: [String: MLXArray] = [:]
     for relative in files {

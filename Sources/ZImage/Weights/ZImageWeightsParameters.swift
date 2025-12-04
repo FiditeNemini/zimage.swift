@@ -107,11 +107,20 @@ public enum ZImageWeightsParameters {
       hasBias: true, dtype: dtype, manifest: manifest
     )
 
-    if let w = source.removeValue(forKey: "\(tensorBase).norm1.weight") {
-      flat["\(modulePath).norm1.weight"] = dtypeAdjusted(w, dtype: dtype)
+    // Attention norms - Python uses attention_norm1, attention_norm2
+    if let w = source.removeValue(forKey: "\(tensorBase).attention_norm1.weight") {
+      flat["\(modulePath).attention_norm1.weight"] = dtypeAdjusted(w, dtype: dtype)
     }
-    if let w = source.removeValue(forKey: "\(tensorBase).norm2.weight") {
-      flat["\(modulePath).norm2.weight"] = dtypeAdjusted(w, dtype: dtype)
+    if let w = source.removeValue(forKey: "\(tensorBase).attention_norm2.weight") {
+      flat["\(modulePath).attention_norm2.weight"] = dtypeAdjusted(w, dtype: dtype)
+    }
+
+    // FFN norms - Python uses ffn_norm1, ffn_norm2
+    if let w = source.removeValue(forKey: "\(tensorBase).ffn_norm1.weight") {
+      flat["\(modulePath).ffn_norm1.weight"] = dtypeAdjusted(w, dtype: dtype)
+    }
+    if let w = source.removeValue(forKey: "\(tensorBase).ffn_norm2.weight") {
+      flat["\(modulePath).ffn_norm2.weight"] = dtypeAdjusted(w, dtype: dtype)
     }
 
     try assignLinear(

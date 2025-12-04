@@ -5,6 +5,11 @@ import Metal
 import MLX
 import ZImage
 
+#if canImport(CoreGraphics)
+import CoreGraphics
+import ImageIO
+#endif
+
 LoggingSystem.bootstrap { label in
   var handler = StreamLogHandler.standardError(label: label)
   handler.logLevel = .info
@@ -76,6 +81,9 @@ struct ZImageCLI {
       case "quantize":
         try runQuantize(args: Array(args.dropFirst()))
         return
+      case "control":
+        try runControl(args: Array(args.dropFirst()))
+        return
       default:
         logger.warning("Unknown argument: \(arg)")
       }
@@ -146,6 +154,13 @@ struct ZImageCLI {
         --bits               Bit width: 4 or 8 (default: 8)
         --group-size         Group size: 32, 64, 128 (default: 32)
         --verbose            Show progress
+
+      control                Generate with ControlNet conditioning
+        --prompt, -p         Text prompt (required)
+        --control-image, -c  Control image path (required)
+        --controlnet-weights Path to controlnet safetensors (required)
+        --control-scale      Control scale (default: 0.75)
+        Use 'ZImageCLI control --help' for full options
 
     Examples:
       ZImageCLI -p "a cute cat" -o cat.png
@@ -245,6 +260,156 @@ struct ZImageCLI {
     """)
   }
 
+  private static func runControl(args: [String]) throws {
+    var prompt: String?
+    var negativePrompt: String?
+    var controlImage: String?
+    var controlScale: Float = 0.75
+    var controlnetWeights: String?
+    var width = ZImageModelMetadata.recommendedWidth
+    var height = ZImageModelMetadata.recommendedHeight
+    var steps = ZImageModelMetadata.recommendedInferenceSteps
+    var guidance = ZImageModelMetadata.recommendedGuidanceScale
+    var seed: UInt64?
+    var outputPath = "z-image-control.png"
+    var model: String?
+    var cacheLimit: Int?
+    var maxSequenceLength = 512
+
+    var iterator = args.makeIterator()
+    while let arg = iterator.next() {
+      switch arg {
+      case "--prompt", "-p":
+        prompt = nextValue(for: arg, iterator: &iterator)
+      case "--negative-prompt", "--np":
+        negativePrompt = nextValue(for: arg, iterator: &iterator)
+      case "--control-image", "-c":
+        controlImage = nextValue(for: arg, iterator: &iterator)
+      case "--control-scale", "--cs":
+        controlScale = floatValue(for: arg, iterator: &iterator, fallback: 0.75)
+      case "--controlnet-weights", "--cw":
+        controlnetWeights = nextValue(for: arg, iterator: &iterator)
+      case "--width", "-W":
+        width = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: width)
+      case "--height", "-H":
+        height = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: height)
+      case "--steps", "-s":
+        steps = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: steps)
+      case "--guidance", "-g":
+        guidance = floatValue(for: arg, iterator: &iterator, fallback: guidance)
+      case "--seed":
+        seed = UInt64(nextValue(for: arg, iterator: &iterator))
+      case "--output", "-o":
+        outputPath = nextValue(for: arg, iterator: &iterator)
+      case "--model", "-m":
+        model = nextValue(for: arg, iterator: &iterator)
+      case "--cache-limit":
+        cacheLimit = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: 2048)
+      case "--max-sequence-length":
+        maxSequenceLength = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: 512)
+      case "--help", "-h":
+        printControlUsage()
+        return
+      default:
+        logger.warning("Unknown control argument: \(arg)")
+      }
+    }
+
+    guard let prompt else {
+      logger.error("Missing required --prompt argument")
+      printControlUsage()
+      return
+    }
+
+    guard let controlImage else {
+      logger.error("Missing required --control-image argument")
+      printControlUsage()
+      return
+    }
+
+    guard let controlnetWeights else {
+      logger.error("Missing required --controlnet-weights argument")
+      printControlUsage()
+      return
+    }
+
+    let controlImageURL = URL(fileURLWithPath: controlImage)
+    guard FileManager.default.fileExists(atPath: controlImageURL.path) else {
+      logger.error("Control image not found: \(controlImage)")
+      return
+    }
+
+    if let limit = cacheLimit {
+      GPU.set(cacheLimit: limit * 1024 * 1024)
+      logger.info("GPU cache limit set to \(limit)MB")
+    }
+
+    let request = ZImageControlGenerationRequest(
+      prompt: prompt,
+      negativePrompt: negativePrompt,
+      controlImage: controlImageURL,
+      controlContextScale: controlScale,
+      width: width,
+      height: height,
+      steps: steps,
+      guidanceScale: guidance,
+      seed: seed,
+      outputPath: URL(fileURLWithPath: outputPath),
+      model: model,
+      controlnetWeights: controlnetWeights,
+      maxSequenceLength: maxSequenceLength
+    )
+
+    let pipeline = ZImageControlPipeline(logger: logger)
+    let semaphore = DispatchSemaphore(value: 0)
+    let finalOutputPath = outputPath
+    Task {
+      do {
+        _ = try await pipeline.generate(request)
+        logger.info("Output saved to: \(finalOutputPath)")
+      } catch {
+        logger.error("Control generation failed: \(error)")
+      }
+      semaphore.signal()
+    }
+    semaphore.wait()
+  }
+
+  private static func printControlUsage() {
+    print("""
+    Generate images with ControlNet conditioning.
+
+    Usage: ZImageCLI control --prompt "text" --control-image <path> --controlnet-weights <path> [options]
+      --prompt, -p              Text prompt (required)
+      --negative-prompt, --np   Negative prompt
+      --control-image, -c       Control image path (required) - Canny, HED, Depth, Pose, or MLSD
+      --control-scale, --cs     Control context scale (default: 0.75, recommended: 0.65-0.80)
+      --controlnet-weights, --cw Path to controlnet safetensors file (required)
+      --width, -W               Output width (default \(ZImageModelMetadata.recommendedWidth))
+      --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
+      --steps, -s               Inference steps (default \(ZImageModelMetadata.recommendedInferenceSteps))
+      --guidance, -g            Guidance scale (default \(ZImageModelMetadata.recommendedGuidanceScale))
+      --seed                    Random seed
+      --output, -o              Output path (default z-image-control.png)
+      --model, -m               Model path or HuggingFace ID (default: \(ZImageRepository.id))
+      --cache-limit             GPU memory cache limit in MB (default: unlimited)
+      --max-sequence-length     Maximum sequence length for text encoding (default: 512)
+      --help, -h                Show help
+
+    Control Types:
+      The control image should be pre-processed according to the control type:
+      - Canny: Edge detection output (white edges on black background)
+      - HED: Holistically-nested edge detection output
+      - Depth: Depth map (grayscale, closer=brighter or depth estimation output)
+      - Pose: OpenPose skeleton visualization
+      - MLSD: Line segment detection output
+
+    Examples:
+      ZImageCLI control -p "a woman on a beach" -c pose.jpg --cw Z-Image-Turbo-Fun-Controlnet-Union.safetensors
+      ZImageCLI control -p "a forest path" -c depth.jpg --cs 0.7 --cw controlnet.safetensors -o forest.png
+    """)
+  }
+
   private static func nextValue(for arg: String, iterator: inout IndexingIterator<[String]>) -> String {
     guard let value = iterator.next() else {
       fatalError("Expected value after \(arg)")
@@ -260,6 +425,7 @@ struct ZImageCLI {
   private static func floatValue(for arg: String, iterator: inout IndexingIterator<[String]>, fallback: Float) -> Float {
     Float(nextValue(for: arg, iterator: &iterator)) ?? fallback
   }
+
 }
 
 try ZImageCLI.run()

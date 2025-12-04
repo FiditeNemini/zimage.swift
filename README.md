@@ -59,6 +59,8 @@ ZImageCLI -h
 | `-o, --output` | Output path | z-image.png |
 | `-m, --model` | Model path or HuggingFace ID | Tongyi-MAI/Z-Image-Turbo |
 | `--cache-limit` | GPU memory cache limit in MB | unlimited |
+| `-l, --lora` | LoRA weights path or HuggingFace ID | - |
+| `--lora-scale` | LoRA scale factor | 1.0 |
 
 ## Examples
 
@@ -74,7 +76,71 @@ ZImageCLI -p "a futuristic city at night" -m mzbac/Z-Image-Turbo-8bit -o city.pn
 
 # With memory limit
 ZImageCLI -p "abstract art" --cache-limit 2048 -o art.png
+
+# With LoRA
+ZImageCLI -p "a lion" --lora ostris/z_image_turbo_childrens_drawings -o lion.png
 ```
+
+## LoRA
+
+Apply LoRA weights for style customization:
+
+```bash
+ZImageCLI -p "a lion" --lora ostris/z_image_turbo_childrens_drawings --lora-scale 1.0 -o lion.png
+```
+
+### LoRA Example
+
+<table width="100%">
+<tr>
+<th>Prompt</th>
+<th>LoRA</th>
+<th>Output</th>
+</tr>
+<tr>
+<td>a lion</td>
+<td><a href="https://huggingface.co/ostris/z_image_turbo_childrens_drawings">ostris/z_image_turbo_childrens_drawings</a></td>
+<td><img src="examples/lora_lion.png" height="256"></td>
+</tr>
+</table>
+
+## ControlNet
+
+Generate images with ControlNet conditioning using Canny, HED, Depth, Pose, or MLSD control images:
+
+```bash
+ZImageCLI control \
+  --prompt "A hyper-realistic close-up portrait of a leopard" \
+  --control-image canny_edges.jpg \
+  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union \
+  --control-scale 0.75 \
+  --output leopard.png
+```
+
+### ControlNet Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-p, --prompt` | Text prompt (required) | - |
+| `-c, --control-image` | Control image path (required) | - |
+| `--cw, --controlnet-weights` | ControlNet weights path or HuggingFace ID (required) | - |
+| `--cs, --control-scale` | Control context scale | 0.75 |
+| `-W, --width` | Output width | 1024 |
+| `-H, --height` | Output height | 1024 |
+| `-s, --steps` | Inference steps | 9 |
+| `-g, --guidance` | Guidance scale | 3.0 |
+| `--seed` | Random seed | random |
+| `-o, --output` | Output path | z-image-control.png |
+| `-m, --model` | Model path or HuggingFace ID | Tongyi-MAI/Z-Image-Turbo |
+
+### ControlNet Examples
+
+| Control Type | Prompt | Control Image | Output |
+|--------------|--------|---------------|--------|
+| Canny | A hyper-realistic close-up portrait of a leopard face hiding behind dense green jungle leaves, camouflaged, direct eye contact, intricate fur detail, bright yellow eyes, cinematic lighting, soft shadows, National Geographic photography, 8k, sharp focus, depth of field | ![Canny](images/canny.jpg) | ![Canny Output](examples/canny.png) |
+| HED | A photorealistic film still of a man in a dark shirt sitting at a dining table in a modern kitchen at night, looking down at a bowl of soup. A glass bottle and a glass of white wine are in the foreground. Warm, low, cinematic lighting, soft shadows, shallow depth of field, contemplative atmosphere, highly detailed. | ![HED](images/hed.jpg) | ![HED Output](examples/hed.png) |
+| Depth | A hyperrealistic architectural photograph of a spacious, minimalist modern hallway interior. Large floor-to-ceiling windows on the right wall fill the space with bright natural daylight. A light gray sectional sofa and a low, modern coffee table are placed in the foreground on a light wood floor. A large potted plant is visible further down the hallway. White walls, clean lines, serene atmosphere, highly detailed, 8k resolution, cinematic lighting | ![Depth](images/depth.jpg) | ![Depth Output](examples/depth.png) |
+| Pose | 一位年轻女子站在阳光明媚的海岸线上，白裙在轻拂的海风中微微飘动。她拥有一头鲜艳的紫色长发，在风中轻盈舞动... | ![Pose](images/pose.jpg) | ![Pose Output](examples/pose.png) |
 
 ## Example Output
 

@@ -427,6 +427,22 @@ public struct ZImageQuantizer {
       return
     }
 
+    if let controlTransformer = model as? ZImageControlTransformer2DModel {
+      for (i, block) in controlTransformer.layers.enumerated() {
+        quantizeBlock(block, prefix: "layers.\(i)", availableKeys: availableKeys,
+                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+      }
+      for (i, block) in controlTransformer.noiseRefiner.enumerated() {
+        quantizeBlock(block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
+                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+      }
+      for (i, block) in controlTransformer.contextRefiner.enumerated() {
+        quantizeBlock(block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
+                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+      }
+      return
+    }
+
     MLXNN.quantize(model: model) { path, _ in
       let tensorName = tensorNameTransform(path)
       let scalesKey = "\(tensorName).scales"

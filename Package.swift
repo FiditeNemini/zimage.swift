@@ -34,6 +34,30 @@ let package = Package(
       name: "ZImageCLI",
       dependencies: ["ZImage"],
       path: "Sources/ZImageCLI"
+    ),
+    .testTarget(
+      name: "ZImageTests",
+      dependencies: [
+        "ZImage",
+        .product(name: "MLX", package: "mlx-swift")
+      ],
+      path: "Tests/ZImageTests"
+    ),
+    .testTarget(
+      name: "ZImageIntegrationTests",
+      dependencies: [
+        "ZImage",
+        .product(name: "MLX", package: "mlx-swift")
+      ],
+      path: "Tests/ZImageIntegrationTests",
+      resources: [
+        .copy("Resources")
+      ]
+    ),
+    .testTarget(
+      name: "ZImageE2ETests",
+      dependencies: ["ZImage"],
+      path: "Tests/ZImageE2ETests"
     )
   ]
 )

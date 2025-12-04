@@ -6,14 +6,14 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 
-enum QwenImageIOError: Error {
+public enum QwenImageIOError: Error {
   case unsupportedPixelFormat
   case invalidArrayShape
   case resizeFailed
   case writeFailed
 }
 
-enum QwenImageIO {
+public enum QwenImageIO {
   static func resizedCGImage(
     from image: CGImage,
     width: Int,
@@ -166,7 +166,7 @@ enum QwenImageIO {
     return image
   }
 
-  static func normalizeForEncoder(_ image: MLXArray) -> MLXArray {
+  public static func normalizeForEncoder(_ image: MLXArray) -> MLXArray {
     image * 2 - 1
   }
 
@@ -185,7 +185,7 @@ enum QwenImageIO {
     }
   }
 
-  static func resizedPixelArray(
+  public static func resizedPixelArray(
     from image: CGImage,
     width: Int,
     height: Int,
@@ -195,64 +195,13 @@ enum QwenImageIO {
     guard width > 0, height > 0 else {
       throw QwenImageIOError.resizeFailed
     }
-    let srcWidth = image.width
-    let srcHeight = image.height
-    let bytesPerPixel = 4
 
-    var argb = [UInt8](repeating: 0, count: srcWidth * srcHeight * bytesPerPixel)
-    let colorSpace = CGColorSpaceCreateDeviceRGB()
-    let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
-    let drawn = argb.withUnsafeMutableBytes { ptr -> Bool in
-      guard let baseAddress = ptr.baseAddress else { return false }
-      guard let context = CGContext(
-        data: baseAddress,
-        width: srcWidth,
-        height: srcHeight,
-        bitsPerComponent: 8,
-        bytesPerRow: srcWidth * bytesPerPixel,
-        space: colorSpace,
-        bitmapInfo: bitmapInfo
-      ) else {
-        return false
-      }
-      let rect = CGRect(x: 0, y: 0, width: srcWidth, height: srcHeight)
-      context.draw(image, in: rect)
-      return true
-    }
-    guard drawn else {
-      throw QwenImageIOError.resizeFailed
-    }
+    // Use CoreGraphics high-quality resize (similar to PIL LANCZOS)
+    let resizedImage = try resizedCGImage(from: image, width: width, height: height)
 
-    let resized: [Float32]
-    if let accelerated = resizeLanczosARGB(
-      argbBytes: argb,
-      srcWidth: srcWidth,
-      srcHeight: srcHeight,
-      dstWidth: width,
-      dstHeight: height
-    ) {
-      resized = accelerated
-    } else {
-      let base = try array(from: image, addBatchDimension: false, dtype: .float32)
-      MLX.eval(base)
-      let source = base.asArray(Float32.self)
-      resized = resizeLanczos(
-        source: source,
-        srcWidth: srcWidth,
-        srcHeight: srcHeight,
-        dstWidth: width,
-        dstHeight: height
-      )
-    }
-    var shape = [3, height, width]
-    if addBatchDimension {
-      shape.insert(1, at: 0)
-    }
-    var output = MLXArray(resized, shape)
-    if dtype != .float32 {
-      output = output.asType(dtype)
-    }
-    return output
+    // Convert resized image to array
+    let arr = try array(from: resizedImage, addBatchDimension: addBatchDimension, dtype: dtype)
+    return arr
   }
 
   static func resize(

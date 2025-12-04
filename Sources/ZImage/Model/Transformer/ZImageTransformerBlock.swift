@@ -62,8 +62,11 @@ public final class ZImageTransformerBlock: Module {
       let mlpScale = (1 + mod[0..., (2*chunkSize)..<(3*chunkSize)])[.ellipsis, .newAxis, 0...]
       let mlpGate = MLX.tanh(mod[0..., (3*chunkSize)..<(4*chunkSize)])[.ellipsis, .newAxis, 0...]
 
-      let attnOut = attention(attentionNorm1(out) * attnScale, attnMask: attnMask, freqsCis: freqsCis)
-      out = out + attnGate * attentionNorm2(attnOut)
+      let xNormed = attentionNorm1(out)
+      let xScaled = xNormed * attnScale
+      let attnOut = attention(xScaled, attnMask: attnMask, freqsCis: freqsCis)
+      let attnNormed = attentionNorm2(attnOut)
+      out = out + attnGate * attnNormed
 
       let ffnOut = feedForward(ffnNorm1(out) * mlpScale)
       out = out + mlpGate * ffnNorm2(ffnOut)
